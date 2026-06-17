@@ -2,10 +2,16 @@
  * Root application component for AgroConnect.
  * Orchestrates the main layout, KPIs, Map, and Producer Cards.
  * Integrates the PropertyDetailModal for rich interactions and Cloudinary uploads.
+ *
+ * Architecture (v2.0 - Supabase Integration):
+ * - Properties loaded from PostgreSQL via PostgREST (Supabase)
+ * - Loading state with premium spinner
+ * - Error state with retry functionality
+ * - All KPIs calculated from real database data
  */
 
-import { useState, lazy, Suspense, useMemo } from 'react';
-import { MOCK_PROPERTIES } from './data/mockProperties';
+import { useState, lazy, Suspense, useMemo, useEffect } from 'react';
+import { fetchProperties } from './services/supabase';
 import { CROP_CATALOG, CERTIFICATION_CATALOG } from './types/property';
 import { getImageUrl } from './services/cloudinary';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -38,34 +44,217 @@ function handleMapError(error: Error): void {
   console.error('[App] Map component error:', error);
 }
 
+/**
+ * Premium Loading Component - Shown while fetching from Supabase
+ */
+function LoadingScreen(): React.ReactElement {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-green-50 flex items-center justify-center">
+      <div className="text-center animate-fadeInUp">
+        <div className="relative inline-block mb-6">
+          <div className="animate-spin rounded-full h-20 w-20 border-4 border-agro-green/20 border-t-agro-green"></div>
+          <div className="absolute inset-0 flex items-center justify-center text-3xl">
+            🌱
+          </div>
+        </div>
+        <h2 className="text-2xl font-bold text-agro-dark mb-2">
+          AgroConnect
+        </h2>
+        <p className="text-gray-600 font-medium mb-1">
+          Conectando con base de datos PostgreSQL
+        </p>
+        <p className="text-sm text-gray-500">
+          Cargando propiedades agrícolas desde Supabase...
+        </p>
+        <div className="mt-6 flex justify-center gap-1">
+          <div className="w-2 h-2 bg-agro-green rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+          <div className="w-2 h-2 bg-agro-green rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+          <div className="w-2 h-2 bg-agro-green rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Error Screen Component - Shown when Supabase connection fails
+ */
+function ErrorScreen({
+  error,
+  onRetry,
+}: {
+  error: string;
+  onRetry: () => void;
+}): React.ReactElement {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-6">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 text-center animate-scaleIn">
+        <div className="text-6xl mb-4">⚠️</div>
+        <h2 className="text-2xl font-bold text-red-700 mb-3">
+          Error de Conexión
+        </h2>
+        <p className="text-gray-700 mb-2 font-medium">
+          No se pudo conectar con la base de datos
+        </p>
+        <p className="text-sm text-gray-500 mb-6 bg-red-50 rounded-lg p-3 border border-red-100">
+          {error}
+        </p>
+        <div className="space-y-2 text-left text-xs text-gray-600 mb-6 bg-gray-50 rounded-lg p-4">
+          <p className="font-semibold text-gray-800 mb-2">🔍 Posibles causas:</p>
+          <p>• Variables de entorno no configuradas</p>
+          <p>• Supabase URL o ANON KEY incorrectos</p>
+          <p>• Tabla 'properties' no existe en la base de datos</p>
+          <p>• Row Level Security bloqueando las consultas</p>
+          <p>• Problema de red o CORS</p>
+        </div>
+        <button
+          onClick={onRetry}
+          className="w-full py-3 bg-gradient-to-r from-agro-green to-green-600 text-white rounded-lg font-semibold hover:shadow-xl hover:scale-105 active:scale-95 interactive-transition flex items-center justify-center gap-2"
+        >
+          <span>🔄</span>
+          <span>Reintentar Conexión</span>
+        </button>
+        <button
+          onClick={() => window.open('https://app.supabase.com', '_blank')}
+          className="w-full mt-3 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 interactive-transition text-sm"
+        >
+          Abrir Dashboard de Supabase
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function App(): React.ReactElement {
+  // ============================================
+  // STATE: Properties from Supabase
+  // ============================================
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [showProductiveZones, setShowProductiveZones] = useState(true);
   const [enableDrawing, setEnableDrawing] = useState(true);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
 
-  const totalArea = MOCK_PROPERTIES.reduce((acc, p) => acc + p.area, 0);
-  const avgProductivity = Math.round(
-    MOCK_PROPERTIES.reduce((acc, p) => acc + p.productivity, 0) / MOCK_PROPERTIES.length
-  );
-  const organicCount = MOCK_PROPERTIES.filter(
-    (p) => p.certification === 'organic'
-  ).length;
+  // ============================================
+  // EFFECT: Load properties from Supabase
+  // ============================================
+  const loadProperties = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('[App] 🔄 Fetching properties from Supabase...');
+      const data = await fetchProperties();
+      
+      if (data.length === 0) {
+        setError(
+          'La base de datos está vacía. Ejecuta el script SQL de inicialización en Supabase.'
+        );
+        setProperties([]);
+      } else {
+        setProperties(data);
+        console.log(`[App] ✅ Loaded ${data.length} properties from Supabase`);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
+      console.error('[App] ❌ Error loading properties:', err);
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const cropCounts = MOCK_PROPERTIES.reduce(
-    (acc, property) => {
-      acc[property.crop] = (acc[property.crop] || 0) + 1;
-      return acc;
-    },
-    {} as Record<CropType, number>
+  useEffect(() => {
+    loadProperties();
+  }, []);
+
+  // ============================================
+  // KPI CALCULATIONS (from real DB data)
+  // ============================================
+  const totalArea = useMemo(
+    () => properties.reduce((acc, p) => acc + p.area, 0),
+    [properties]
+  );
+
+  const avgProductivity = useMemo(
+    () =>
+      properties.length > 0
+        ? Math.round(
+            properties.reduce((acc, p) => acc + p.productivity, 0) / properties.length
+          )
+        : 0,
+    [properties]
+  );
+
+  const organicCount = useMemo(
+    () => properties.filter((p) => p.certification === 'organic').length,
+    [properties]
+  );
+
+  const cropCounts = useMemo(
+    () =>
+      properties.reduce(
+        (acc, property) => {
+          acc[property.crop] = (acc[property.crop] || 0) + 1;
+          return acc;
+        },
+        {} as Record<CropType, number>
+      ),
+    [properties]
   );
 
   const topCrops = useMemo(() => {
+    if (Object.keys(cropCounts).length === 0) return [];
     const maxCount = Math.max(...Object.values(cropCounts));
     return Object.entries(cropCounts)
       .filter(([, count]) => count === maxCount)
       .map(([crop]) => crop as CropType);
   }, [cropCounts]);
 
+  // ============================================
+  // RENDER: Loading State
+  // ============================================
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  // ============================================
+  // RENDER: Error State
+  // ============================================
+  if (error) {
+    return <ErrorScreen error={error} onRetry={loadProperties} />;
+  }
+
+  // ============================================
+  // RENDER: Empty State (no properties in DB)
+  // ============================================
+  if (properties.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-green-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
+          <div className="text-6xl mb-4">📭</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">
+            No hay propiedades registradas
+          </h2>
+          <p className="text-gray-600 mb-6">
+            La base de datos PostgreSQL está conectada pero no contiene datos.
+            Ejecuta el script SQL de inicialización en Supabase para cargar las propiedades de ejemplo.
+          </p>
+          <button
+            onClick={loadProperties}
+            className="w-full py-3 bg-agro-green text-white rounded-lg font-semibold hover:bg-agro-dark interactive-transition"
+          >
+            🔄 Recargar Datos
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================
+  // RENDER: Main Application (Success State)
+  // ============================================
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-green-50">
       <style>{`
@@ -154,8 +343,11 @@ function App(): React.ReactElement {
               <p className="text-gray-600 mt-1 font-bold hover:text-agro-green hover:scale-105 hover:translate-x-1 interactive-transition cursor-default inline-block">
                 Del productor al comprador, sin intermediarios
               </p>
+              <p className="text-xs text-agro-green/70 mt-1 font-medium">
+                💾 Datos en tiempo real desde PostgreSQL
+              </p>
             </div>
-            {/* KPI Cards: w-36 h-28 (144x112px) - Rectangular, compact height, legible text */}
+            {/* KPI Cards: Calculated from real Supabase data */}
             <div className="flex gap-3 flex-wrap justify-end">
               <div className="w-36 h-28 bg-agro-green/10 rounded-lg border border-agro-green/30 animate-slideInRight delay-200 hover:scale-110 hover:shadow-lg interactive-transition cursor-default group animate-pulseGlowGreen flex flex-col items-center justify-center text-center p-3">
                 <p className="text-xs text-agro-dark font-semibold group-hover:text-agro-green interactive-transition leading-tight">
@@ -164,14 +356,16 @@ function App(): React.ReactElement {
                   Activas
                 </p>
                 <p className="text-3xl font-bold text-agro-green mt-1">
-                  {MOCK_PROPERTIES.length}
+                  {properties.length}
                 </p>
               </div>
               <div className="w-36 h-28 bg-agro-yellow/10 rounded-lg border-2 border-agro-yellow/30 animate-slideInRight delay-300 hover:scale-110 hover:shadow-lg hover:border-agro-yellow interactive-transition cursor-default group flex flex-col items-center justify-center text-center p-3">
                 <p className="text-xs text-gray-700 font-semibold group-hover:text-agro-yellow interactive-transition leading-tight">
                   Hectáreas
                 </p>
-                <p className="text-3xl font-bold text-agro-dark mt-1">{totalArea}</p>
+                <p className="text-3xl font-bold text-agro-dark mt-1">
+                  {totalArea.toFixed(1)}
+                </p>
               </div>
               <div className="w-36 h-28 bg-blue-50 rounded-lg border border-blue-200 animate-slideInRight delay-400 hover:scale-110 hover:shadow-lg interactive-transition cursor-default group animate-pulseGlowBlue flex flex-col items-center justify-center text-center p-3">
                 <p className="text-xs text-blue-700 font-semibold group-hover:text-blue-900 interactive-transition leading-tight">
@@ -187,7 +381,9 @@ function App(): React.ReactElement {
                   <br />
                   Orgánica
                 </p>
-                <p className="text-3xl font-bold text-green-700 mt-1">{organicCount}</p>
+                <p className="text-3xl font-bold text-green-700 mt-1">
+                  {organicCount}
+                </p>
               </div>
             </div>
           </div>
@@ -205,7 +401,6 @@ function App(): React.ReactElement {
                 Explora los cultivos de tu región de forma sencilla
               </p>
             </div>
-            {/* Buttons with uniform height: min-width + whitespace-nowrap prevents height changes */}
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setShowProductiveZones(!showProductiveZones)}
@@ -233,11 +428,11 @@ function App(): React.ReactElement {
           <ErrorBoundary onError={handleMapError}>
             <Suspense fallback={<MapLoadingFallback />}>
               <PropertyMap
-                properties={MOCK_PROPERTIES}
+                properties={properties}
                 showProductiveZones={showProductiveZones}
                 enableDrawing={enableDrawing}
                 onPolygonCreated={(coords) => {
-                  console.log('🎯 New parcel created:', coords);
+                  console.log('[App] 🎯 New parcel created:', coords);
                 }}
               />
             </Suspense>
@@ -303,14 +498,16 @@ function App(): React.ReactElement {
             📋 Productores Destacados
           </h2>
           <div className="flex flex-wrap justify-center gap-4">
-            {MOCK_PROPERTIES.map((property, index) => {
+            {properties.map((property, index) => {
               const cropInfo = CROP_CATALOG[property.crop];
               const certificationInfo = property.certification
                 ? CERTIFICATION_CATALOG[property.certification]
                 : null;
               const thumbnailUrl =
                 property.images && property.images.length > 0
-                  ? getImageUrl(property.images[0].publicId, 'medium')
+                  ? typeof property.images[0] === 'string'
+                    ? property.images[0]
+                    : getImageUrl(property.images[0].publicId, 'medium')
                   : null;
               const delayClass = `delay-${Math.min((index + 10) * 100, 1200)}`;
 
@@ -379,27 +576,21 @@ function App(): React.ReactElement {
                           {property.productivity}%
                         </span>
                       </p>
-                      <p>
-                        📅 <span className="font-medium">{cropInfo.season}</span>
-                      </p>
-                      <p>
-                        {certificationInfo ? (
-                          <>
-                            {certificationInfo.emoji}{' '}
-                            <span className="font-medium">
-                              {certificationInfo.displayName}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            ⚪{' '}
-                            <span className="font-medium text-gray-500">
-                              Sin Certificación
-                            </span>
-                          </>
-                        )}
-                      </p>
-                      <p>📞 {property.contact}</p>
+                      {certificationInfo ? (
+                        <p>
+                          {certificationInfo.emoji}{' '}
+                          <span className="font-medium">
+                            {certificationInfo.displayName}
+                          </span>
+                        </p>
+                      ) : (
+                        <p>
+                          ⚪{' '}
+                          <span className="font-medium text-gray-500">
+                            Sin Certificación
+                          </span>
+                        </p>
+                      )}
                     </div>
                     <button
                       onClick={() => setSelectedProperty(property)}
@@ -513,14 +704,19 @@ function App(): React.ReactElement {
                 © 2026 <span className="font-bold text-agro-yellow">AgroConnect</span> -
                 Proyecto Formativo ADSO SENA
               </p>
-              <p className="text-green-200 flex items-center gap-2 text-center md:text-right">
-                <span>Construido con</span>
-                <span className="text-red-400 animate-pulse text-lg">💚</span>
-                <span>usando</span>
+              <p className="text-green-200 flex items-center gap-2 text-center md:text-right flex-wrap justify-center">
+                <span>Powered by</span>
                 <span className="font-semibold text-agro-yellow hover:text-white interactive-transition cursor-default">
-                  Leaflet + OpenStreetMap
+                  PostgreSQL + PostgREST
                 </span>
-                <span>(100% Open Source)</span>
+                <span>•</span>
+                <span className="font-semibold text-agro-yellow hover:text-white interactive-transition cursor-default">
+                  Supabase
+                </span>
+                <span>•</span>
+                <span className="font-semibold text-agro-yellow hover:text-white interactive-transition cursor-default">
+                  Vercel
+                </span>
               </p>
             </div>
           </div>

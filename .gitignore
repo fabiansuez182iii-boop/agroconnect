@@ -1,4 +1,42 @@
+# Dependencias
 node_modules/
+frontend/node_modules/
+
+# Build
 dist/
-.env.local
+frontend/dist/
+
+# Variables de entorno
 .env
+.env.local
+.env.*.local
+
+# Binarios accidentales
+frontend/leaflet
+frontend/react
+frontend/vite
+frontend/tsc
+frontend/prettier
+frontend/eslint
+frontend/{
+
+# Vault de Obsidian (NUNCA subir)
+obsidian-vault/
+
+# Config local
+opencode.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
