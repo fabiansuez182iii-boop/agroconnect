@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Leaflet fixes */
+.leaflet-container {
+  font-family: 'Inter', system-ui, sans-serif;
+  z-index: 1;
+}
+
+.custom-crop-icon,
+.custom-cluster-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* GeoSearch style fixes */
+.leaflet-control-geosearch {
+  z-index: 1000 !important;
+}
+
+.leaflet-control-geosearch form {
+  border-radius: 8px !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+}
+
+/* MarkerCluster styles override */
+.marker-cluster {
+  background-clip: padding-box;
+  border-radius: 50%;
+}
