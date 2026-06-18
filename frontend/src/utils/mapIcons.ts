@@ -1,27 +1,16 @@
 /**
  * Map icon utilities for AgroConnect.
- *
- * Architecture (v3.0 - Geometrically precise anchors):
- * - iconAnchor at CENTER of circle (20, 20) for accurate map positioning
- * - popupAnchor at [0, -20] for popup glued to top edge of circle
- * - Solid colored circles with emoji for each crop type
- * - Subtle shadow and white border for premium visual quality
+ * Architecture v3.2 - Uses centralized getCropInfo helper from types/property.ts
  */
 
 import L from 'leaflet';
-import type { CropType } from '../types/property';
-import { CROP_CATALOG } from '../types/property';
+import { getCropInfo } from '../types/property';
 
 /**
  * Creates a custom marker icon for a specific crop type.
- *
- * Geometry:
- * - Icon size: 40x40px (circle)
- * - iconAnchor: [20, 20] → center of circle (map reference point)
- * - popupAnchor: [0, -20] → popup base at top edge of circle
  */
-export function createCropIcon(crop: CropType): L.DivIcon {
-  const cropInfo = CROP_CATALOG[crop];
+export function createCropIcon(crop: string): L.DivIcon {
+  const cropInfo = getCropInfo(crop);
 
   return L.divIcon({
     className: 'custom-crop-marker',
@@ -51,7 +40,6 @@ export function createCropIcon(crop: CropType): L.DivIcon {
 
 /**
  * Creates a cluster icon showing the count of grouped markers.
- * Premium gradient design with dynamic sizing based on count.
  */
 export function createClusterIcon(count: number): L.DivIcon {
   const size = count < 10 ? 44 : count < 100 ? 52 : 62;

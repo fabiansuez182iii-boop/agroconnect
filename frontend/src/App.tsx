@@ -3,8 +3,9 @@
  * Orchestrates the main layout, KPIs, Map, and Producer Cards.
  * Integrates the PropertyDetailModal for rich interactions and Cloudinary uploads.
  *
- * Architecture (v2.0 - Supabase Integration):
+ * Architecture (v2.1 - Defensive Rendering + Supabase Integration):
  * - Properties loaded from PostgreSQL via PostgREST (Supabase)
+ * - Defensive fallback for unknown crops/certifications (prevents undefined errors)
  * - Loading state with premium spinner
  * - Error state with retry functionality
  * - All KPIs calculated from real database data
@@ -12,11 +13,11 @@
 
 import { useState, lazy, Suspense, useMemo, useEffect } from 'react';
 import { fetchProperties } from './services/supabase';
-import { CROP_CATALOG, CERTIFICATION_CATALOG } from './types/property';
 import { getImageUrl } from './services/cloudinary';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { PropertyDetailModal } from './components/ui/PropertyDetailModal';
-import type { CropType, Property } from './types/property';
+import { CROP_CATALOG, getCropInfo, getCertificationInfo } from './types/property';
+import type { Property } from './types/property';
 
 const PropertyMap = lazy(() =>
   import('./components/maps/PropertyMap').then((module) => ({
@@ -57,9 +58,7 @@ function LoadingScreen(): React.ReactElement {
             🌱
           </div>
         </div>
-        <h2 className="text-2xl font-bold text-agro-dark mb-2">
-          AgroConnect
-        </h2>
+        <h2 className="text-2xl font-bold text-agro-dark mb-2">AgroConnect</h2>
         <p className="text-gray-600 font-medium mb-1">
           Conectando con base de datos PostgreSQL
         </p>
@@ -67,9 +66,18 @@ function LoadingScreen(): React.ReactElement {
           Cargando propiedades agrícolas desde Supabase...
         </p>
         <div className="mt-6 flex justify-center gap-1">
-          <div className="w-2 h-2 bg-agro-green rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-          <div className="w-2 h-2 bg-agro-green rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-          <div className="w-2 h-2 bg-agro-green rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+          <div
+            className="w-2 h-2 bg-agro-green rounded-full animate-bounce"
+            style={{ animationDelay: '0s' }}
+          ></div>
+          <div
+            className="w-2 h-2 bg-agro-green rounded-full animate-bounce"
+            style={{ animationDelay: '0.2s' }}
+          ></div>
+          <div
+            className="w-2 h-2 bg-agro-green rounded-full animate-bounce"
+            style={{ animationDelay: '0.4s' }}
+          ></div>
         </div>
       </div>
     </div>
@@ -90,9 +98,7 @@ function ErrorScreen({
     <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-6">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8 text-center animate-scaleIn">
         <div className="text-6xl mb-4">⚠️</div>
-        <h2 className="text-2xl font-bold text-red-700 mb-3">
-          Error de Conexión
-        </h2>
+        <h2 className="text-2xl font-bold text-red-700 mb-3">Error de Conexión</h2>
         <p className="text-gray-700 mb-2 font-medium">
           No se pudo conectar con la base de datos
         </p>
@@ -146,7 +152,7 @@ function App(): React.ReactElement {
       setError(null);
       console.log('[App] 🔄 Fetching properties from Supabase...');
       const data = await fetchProperties();
-      
+
       if (data.length === 0) {
         setError(
           'La base de datos está vacía. Ejecuta el script SQL de inicialización en Supabase.'
@@ -199,7 +205,7 @@ function App(): React.ReactElement {
           acc[property.crop] = (acc[property.crop] || 0) + 1;
           return acc;
         },
-        {} as Record<CropType, number>
+        {} as Record<string, number>
       ),
     [properties]
   );
@@ -209,7 +215,7 @@ function App(): React.ReactElement {
     const maxCount = Math.max(...Object.values(cropCounts));
     return Object.entries(cropCounts)
       .filter(([, count]) => count === maxCount)
-      .map(([crop]) => crop as CropType);
+      .map(([crop]) => crop);
   }, [cropCounts]);
 
   // ============================================
@@ -238,8 +244,9 @@ function App(): React.ReactElement {
             No hay propiedades registradas
           </h2>
           <p className="text-gray-600 mb-6">
-            La base de datos PostgreSQL está conectada pero no contiene datos.
-            Ejecuta el script SQL de inicialización en Supabase para cargar las propiedades de ejemplo.
+            La base de datos PostgreSQL está conectada pero no contiene datos. Ejecuta el
+            script SQL de inicialización en Supabase para cargar las propiedades de
+            ejemplo.
           </p>
           <button
             onClick={loadProperties}
@@ -343,9 +350,6 @@ function App(): React.ReactElement {
               <p className="text-gray-600 mt-1 font-bold hover:text-agro-green hover:scale-105 hover:translate-x-1 interactive-transition cursor-default inline-block">
                 Del productor al comprador, sin intermediarios
               </p>
-              <p className="text-xs text-agro-green/70 mt-1 font-medium">
-                💾 Datos en tiempo real desde PostgreSQL
-              </p>
             </div>
             {/* KPI Cards: Calculated from real Supabase data */}
             <div className="flex gap-3 flex-wrap justify-end">
@@ -381,9 +385,7 @@ function App(): React.ReactElement {
                   <br />
                   Orgánica
                 </p>
-                <p className="text-3xl font-bold text-green-700 mt-1">
-                  {organicCount}
-                </p>
+                <p className="text-3xl font-bold text-green-700 mt-1">{organicCount}</p>
               </div>
             </div>
           </div>
@@ -445,9 +447,17 @@ function App(): React.ReactElement {
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {Object.entries(cropCounts).map(([crop, count], index) => {
-              const info = CROP_CATALOG[crop as CropType];
-              const isTopCrop = topCrops.includes(crop as CropType);
+              // ✅ DEFENSIVE: Safe getter with fallback for unknown crops
+              const info = getCropInfo(crop);
+              const isTopCrop = topCrops.includes(crop);
               const delayClass = `delay-${(index + 7) * 100}`;
+
+              // Log warning for unknown crops (helps with debugging)
+              if (!(crop in CROP_CATALOG)) {
+                console.warn(
+                  `[App] ⚠️ Cultivo no encontrado en catálogo: "${crop}". Usando fallback.`
+                );
+              }
 
               return (
                 <div
@@ -456,14 +466,14 @@ function App(): React.ReactElement {
                   style={{
                     borderColor: info.color,
                     animation: isTopCrop
-                      ? `pulseGlow_${crop} 2s ease-in-out infinite, fadeInUp 0.6s ease-out both`
+                      ? `pulseGlow_${crop.replace(/\s+/g, '_')} 2s ease-in-out infinite, fadeInUp 0.6s ease-out both`
                       : undefined,
                     animationDelay: isTopCrop ? `0s, ${(index + 7) * 0.1}s` : undefined,
                   }}
                 >
                   {isTopCrop && (
                     <style>{`
-                      @keyframes pulseGlow_${crop} {
+                      @keyframes pulseGlow_${crop.replace(/\s+/g, '_')} {
                         0%, 100% { box-shadow: 0 0 0 0 ${info.color}40; }
                         50% { box-shadow: 0 0 20px 5px ${info.color}30; }
                       }
@@ -499,10 +509,18 @@ function App(): React.ReactElement {
           </h2>
           <div className="flex flex-wrap justify-center gap-4">
             {properties.map((property, index) => {
-              const cropInfo = CROP_CATALOG[property.crop];
-              const certificationInfo = property.certification
-                ? CERTIFICATION_CATALOG[property.certification]
-                : null;
+              // ✅ DEFENSIVE: Safe getters with fallback for unknown crops/certifications
+              const cropInfo = getCropInfo(property.crop);
+              const certificationInfo = getCertificationInfo(property.certification);
+
+              // Log warnings for unknown values (helps with debugging)
+
+              if (!(property.crop in CROP_CATALOG)) {
+                console.warn(
+                  `[App] ⚠️ Propiedad "${property.name}" tiene cultivo desconocido: "${property.crop}". Usando fallback.`
+                );
+              }
+
               const thumbnailUrl =
                 property.images && property.images.length > 0
                   ? typeof property.images[0] === 'string'
@@ -523,6 +541,10 @@ function App(): React.ReactElement {
                         alt={property.name}
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                         loading="lazy"
+                        onError={(e) => {
+                          // Fallback si la imagen falla al cargar
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
                       />
                       <div className="absolute top-2 right-2">
                         <span
@@ -683,16 +705,16 @@ function App(): React.ReactElement {
                   <span>
                     SENA - Servicio Nacional de Aprendizaje
                     <br />
-                    Bogotá, Colombia
+                    Centro de Comercio y Turismo - Armenia, Colombia
                   </span>
                 </li>
                 <li className="flex items-center gap-2 hover:text-white interactive-transition">
                   <span className="text-lg">📧</span>
-                  <a href="mailto:agroconnect@sena.edu.co">agroconnect@sena.edu.co</a>
+                  <a href="mailto:agroconnet.07@gmail.com">agroconnet.07@gmail.com</a>
                 </li>
                 <li className="flex items-center gap-2 hover:text-white interactive-transition">
                   <span className="text-lg">📞</span>
-                  <span>+57 (1) 546-1500</span>
+                  <span>+57 317 576 15 71</span>
                 </li>
               </ul>
             </div>

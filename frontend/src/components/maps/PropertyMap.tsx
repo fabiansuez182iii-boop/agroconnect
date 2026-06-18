@@ -1,9 +1,10 @@
 /**
  * PropertyMap component with enhanced interactivity.
  *
- * Architecture (v3.23 - Popup design refinements):
+ * Architecture (v3.24 - Defensive crop access throughout):
+ * - All CROP_CATALOG[property.crop] replaced with getCropInfo(property.crop)
  * - popupAnchor: [0, -20] for popup glued to icon with visible tip
- * - Restored original popup width (450/350) for better content display
+ * - Restored original popup width (520/450) for better content display
  * - Restored triangular tip (▲) pointing to icon for premium UX
  * - Close button (✕) unified with search banner style (white/gray/red 24px)
  * - All previous functionality preserved (search, zoom lock, popup persistence)
@@ -28,7 +29,7 @@ import 'leaflet-geosearch/dist/geosearch.css';
 import 'react-leaflet-markercluster/styles';
 
 import type { Property, HeatmapPoint } from '../../types/property';
-import { CROP_CATALOG } from '../../types/property';
+import { CROP_CATALOG, getCropInfo } from '../../types/property';
 import { createCropIcon, createClusterIcon } from '../../utils/mapIcons';
 import { useLeafletDraw } from '../../hooks/useLeafletDraw';
 import { ResetViewControl } from './ResetViewControl';
@@ -48,7 +49,8 @@ const MAP_CONSTANTS = {
 } as const;
 
 /**
- * Combined search provider: Properties + OpenStreetMap places
+ * Combined search provider: Properties + OpenStreetMap places.
+ * Uses getCropInfo() for safe access to crop display names.
  */
 class CombinedSearchProvider {
   private properties: Property[];
@@ -84,12 +86,14 @@ class CombinedSearchProvider {
     }> = [];
 
     const propertyMatches = this.properties.filter((property) => {
+      // ✅ DEFENSIVE: Use getCropInfo() instead of direct CROP_CATALOG access
+      const cropDisplayName = getCropInfo(property.crop).displayName;
       const searchableText = [
         property.name,
         property.owner,
         property.department,
         property.municipality,
-        CROP_CATALOG[property.crop].displayName,
+        cropDisplayName,
       ]
         .join(' ')
         .toLowerCase();
@@ -1300,8 +1304,8 @@ export function PropertyMap({
         }
 
         /* ============================================ */
-        /* POPUP - RESTORED PREMIUM DESIGN WITH TIP */
-        /* - Restored width: 450/350 (more spacious)     */
+        /* POPUP - PREMIUM DESIGN WITH VISIBLE TIP */
+        /* - Width: 520/450 (spacious for rich content)  */
         /* - Triangular tip (▲) visible, pointing to icon */
         /* ============================================ */
         @keyframes popupFadeIn {
@@ -1446,409 +1450,132 @@ export function PropertyMap({
           showCoverageOnHover={false}
           maxClusterRadius={80}
         >
-          {properties.map((property) => (
-            <Marker
-              key={property.id}
-              position={[property.lat, property.lng]}
-              icon={createCropIcon(property.crop)}
-              eventHandlers={{
-                popupopen: () => handlePopupOpen(property.id),
-                popupclose: handlePopupClose,
-              }}
-            >
-              <Popup
-                maxWidth={520}
-                minWidth={450}
-                autoPan={true}
-                autoPanPadding={[50, 50]}
-                closeButton={false}
-                closeOnClick={false}
-                autoClose={true}
+          {properties.map((property) => {
+            // ✅ DEFENSIVE: Get crop info once per property to avoid repeated lookups
+            const cropInfo = getCropInfo(property.crop);
+
+            return (
+              <Marker
+                key={property.id}
+                position={[property.lat, property.lng]}
+                icon={createCropIcon(property.crop)}
+                eventHandlers={{
+                  popupopen: () => handlePopupOpen(property.id),
+                  popupclose: handlePopupClose,
+                }}
               >
-                <div
-                  className="relative"
-                  style={{
-                    fontFamily: 'system-ui, -apple-system, sans-serif',
-                    margin: 0,
-                    padding: 0,
-                  }}
+                <Popup
+                  maxWidth={520}
+                  minWidth={450}
+                  autoPan={true}
+                  autoPanPadding={[50, 50]}
+                  closeButton={false}
+                  closeOnClick={false}
+                  autoClose={true}
                 >
-                  {/* Unified Close Button (same style as search banner) */}
-                  <PopupCloseButton />
-
-                  {/* Gallery Section */}
-                  <div className="popup-gallery">
-                    {property.images && property.images.length > 0 && (
-                      <div style={{ margin: 0 }}>
-                        <ImageGallery images={property.images} className="h-52" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Header Section with Premium Gradient */}
                   <div
-                    className="popup-header"
+                    className="relative"
                     style={{
-                      padding: '16px 20px 12px 20px',
-                      background:
-                        property.images && property.images.length > 0
-                          ? 'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(240,253,244,0.4) 100%)'
-                          : 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
-                      borderBottom: '1px solid #E5E7EB',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      margin: 0,
+                      padding: 0,
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                      <div
-                        style={{
-                          flexShrink: 0,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: '12px',
-                          width: '48px',
-                          height: '48px',
-                          background: `linear-gradient(135deg, ${CROP_CATALOG[property.crop].color} 0%, ${CROP_CATALOG[property.crop].color}DD 100%)`,
-                          boxShadow: `0 4px 12px ${CROP_CATALOG[property.crop].color}40`,
-                          fontSize: '24px',
-                        }}
-                      >
-                        {CROP_CATALOG[property.crop].emoji}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <h3
-                          style={{
-                            margin: '0 0 2px 0',
-                            fontWeight: 700,
-                            lineHeight: 1.2,
-                            color: '#14532D',
-                            fontSize: '17px',
-                            letterSpacing: '-0.01em',
-                          }}
-                        >
-                          {property.name}
-                        </h3>
-                        <p
-                          style={{
-                            margin: 0,
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: '#6B7280',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                          }}
-                        >
-                          <span>📍</span>
-                          <span>
-                            {property.municipality}, {property.department}
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                    {/* Unified Close Button (same style as search banner) */}
+                    <PopupCloseButton />
 
-                  {/* Details Section - Premium Grid Layout */}
-                  <div
-                    className="popup-details"
-                    style={{
-                      padding: '16px 20px',
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: '12px',
-                    }}
-                  >
-                    {/* Owner Card */}
+                    {/* Gallery Section */}
+                    <div className="popup-gallery">
+                      {property.images && property.images.length > 0 && (
+                        <div style={{ margin: 0 }}>
+                          <ImageGallery images={property.images} className="h-52" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Header Section with Premium Gradient */}
                     <div
+                      className="popup-header"
                       style={{
-                        background: '#F9FAFB',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        gridColumn: 'span 2',
+                        padding: '16px 20px 12px 20px',
+                        background:
+                          property.images && property.images.length > 0
+                            ? 'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(240,253,244,0.4) 100%)'
+                            : 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
+                        borderBottom: '1px solid #E5E7EB',
                       }}
                     >
                       <div
-                        style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          color: '#6B7280',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          marginBottom: '2px',
-                        }}
-                      >
-                        👤 Propietario
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          color: '#111827',
-                        }}
-                      >
-                        {property.owner}
-                      </div>
-                    </div>
-
-                    {/* Crop Badge Card */}
-                    <div
-                      style={{
-                        background: '#F9FAFB',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          color: '#6B7280',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          marginBottom: '4px',
-                        }}
-                      >
-                        🌱 Cultivo
-                      </div>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '3px 10px',
-                          borderRadius: '999px',
-                          color: 'white',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          background: `linear-gradient(135deg, ${CROP_CATALOG[property.crop].color} 0%, ${CROP_CATALOG[property.crop].color}CC 100%)`,
-                          boxShadow: `0 2px 6px ${CROP_CATALOG[property.crop].color}30`,
-                          letterSpacing: '0.02em',
-                        }}
-                      >
-                        {CROP_CATALOG[property.crop].displayName}
-                      </span>
-                    </div>
-
-                    {/* Area Card */}
-                    <div
-                      style={{
-                        background: '#F9FAFB',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          color: '#6B7280',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          marginBottom: '2px',
-                        }}
-                      >
-                        📐 Área
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          color: '#111827',
-                        }}
-                      >
-                        {property.area}{' '}
-                        <span style={{ color: '#6B7280', fontWeight: 500 }}>ha</span>
-                      </div>
-                    </div>
-
-                    {/* Productivity Card with Visual Bar */}
-                    <div
-                      style={{
-                        background: '#F9FAFB',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        gridColumn: 'span 2',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          color: '#6B7280',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          marginBottom: '6px',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <span>📈 Productividad</span>
-                        <span
-                          style={{
-                            fontSize: '14px',
-                            fontWeight: 800,
-                            color:
-                              property.productivity >= 70
-                                ? '#16A34A'
-                                : property.productivity >= 40
-                                  ? '#CA8A04'
-                                  : '#DC2626',
-                          }}
-                        >
-                          {property.productivity}%
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          height: '6px',
-                          background: '#E5E7EB',
-                          borderRadius: '3px',
-                          overflow: 'hidden',
-                        }}
+                        style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}
                       >
                         <div
                           style={{
-                            height: '100%',
-                            width: `${property.productivity}%`,
-                            background:
-                              property.productivity >= 70
-                                ? 'linear-gradient(90deg, #16A34A, #22C55E)'
-                                : property.productivity >= 40
-                                  ? 'linear-gradient(90deg, #CA8A04, #EAB308)'
-                                  : 'linear-gradient(90deg, #DC2626, #EF4444)',
-                            borderRadius: '3px',
-                            transition: 'width 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '12px',
+                            width: '48px',
+                            height: '48px',
+                            background: `linear-gradient(135deg, ${cropInfo.color} 0%, ${cropInfo.color}DD 100%)`,
+                            boxShadow: `0 4px 12px ${cropInfo.color}40`,
+                            fontSize: '24px',
                           }}
-                        />
+                        >
+                          {cropInfo.emoji}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h3
+                            style={{
+                              margin: '0 0 2px 0',
+                              fontWeight: 700,
+                              lineHeight: 1.2,
+                              color: '#14532D',
+                              fontSize: '17px',
+                              letterSpacing: '-0.01em',
+                            }}
+                          >
+                            {property.name}
+                          </h3>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              color: '#6B7280',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            <span>📍</span>
+                            <span>
+                              {property.municipality}, {property.department}
+                            </span>
+                          </p>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Certification Card (if exists) - Highlighted in Gold */}
-                    {property.certification && (
+                    {/* Details Section - Premium Grid Layout */}
+                    <div
+                      className="popup-details"
+                      style={{
+                        padding: '16px 20px',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '12px',
+                      }}
+                    >
+                      {/* Owner Card */}
                       <div
                         style={{
-                          gridColumn: 'span 2',
-                          background: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
+                          background: '#F9FAFB',
                           padding: '10px 12px',
                           borderRadius: '8px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          border: '1px solid #FCD34D',
+                          gridColumn: 'span 2',
                         }}
                       >
-                        <span style={{ fontSize: '16px' }}>✅</span>
-                        <div>
-                          <div
-                            style={{
-                              fontSize: '10px',
-                              fontWeight: 700,
-                              color: '#92400E',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.05em',
-                            }}
-                          >
-                            Certificación
-                          </div>
-                          <div
-                            style={{
-                              fontSize: '12px',
-                              fontWeight: 600,
-                              color: '#78350F',
-                              textTransform: 'capitalize',
-                            }}
-                          >
-                            {property.certification.replace('_', ' ')}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Coordinates Footer - Monospace Technical Style */}
-                  <div
-                    className="popup-coords"
-                    style={{
-                      padding: '10px 20px',
-                      background: '#F9FAFB',
-                      borderTop: '1px solid #E5E7EB',
-                      fontSize: '11px',
-                      color: '#6B7280',
-                      fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-                      letterSpacing: '0.02em',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <span>🎯</span>
-                    <span>
-                      {property.lat.toFixed(4)}°, {property.lng.toFixed(4)}°
-                    </span>
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
-        </MarkerClusterGroup>
-
-        {properties
-          .filter((p) => p.coordinates && p.coordinates.length > 0)
-          .map((property) => (
-            <Polygon
-              key={`polygon-${property.id}`}
-              positions={property.coordinates!}
-              pathOptions={{
-                color: CROP_CATALOG[property.crop].color,
-                fillColor: CROP_CATALOG[property.crop].color,
-                fillOpacity: 0.25,
-                weight: 2,
-              }}
-            >
-              <Popup
-                maxWidth={520}
-                minWidth={450}
-                autoPan={true}
-                autoPanPadding={[50, 50]}
-                closeButton={false}
-                closeOnClick={false}
-                autoClose={true}
-              >
-                <div
-                  className="relative"
-                  style={{
-                    fontFamily: 'system-ui, -apple-system, sans-serif',
-                    margin: 0,
-                    padding: 0,
-                  }}
-                >
-                  {/* Unified Close Button */}
-                  <PopupCloseButton />
-
-                  {/* Polygon Header */}
-                  <div
-                    style={{
-                      padding: '16px 20px 12px 20px',
-                      background: 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
-                      borderBottom: '1px solid #E5E7EB',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                      <div
-                        style={{
-                          flexShrink: 0,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: '12px',
-                          width: '48px',
-                          height: '48px',
-                          background: `linear-gradient(135deg, ${CROP_CATALOG[property.crop].color} 0%, ${CROP_CATALOG[property.crop].color}DD 100%)`,
-                          boxShadow: `0 4px 12px ${CROP_CATALOG[property.crop].color}40`,
-                          fontSize: '24px',
-                        }}
-                      >
-                        {CROP_CATALOG[property.crop].emoji}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div
                           style={{
                             fontSize: '10px',
@@ -1859,127 +1586,419 @@ export function PropertyMap({
                             marginBottom: '2px',
                           }}
                         >
-                          Parcela
+                          👤 Propietario
                         </div>
-                        <h3
+                        <div
                           style={{
-                            margin: 0,
-                            fontWeight: 700,
-                            lineHeight: 1.2,
-                            color: '#14532D',
-                            fontSize: '17px',
-                            letterSpacing: '-0.01em',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: '#111827',
                           }}
                         >
-                          {property.name}
-                        </h3>
+                          {property.owner}
+                        </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Polygon Detail */}
-                  <div
-                    style={{
-                      padding: '16px 20px',
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: '12px',
-                    }}
-                  >
-                    {/* Area */}
+                      {/* Crop Badge Card */}
+                      <div
+                        style={{
+                          background: '#F9FAFB',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: '#6B7280',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            marginBottom: '4px',
+                          }}
+                        >
+                          🌱 Cultivo
+                        </div>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '3px 10px',
+                            borderRadius: '999px',
+                            color: 'white',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            background: `linear-gradient(135deg, ${cropInfo.color} 0%, ${cropInfo.color}CC 100%)`,
+                            boxShadow: `0 2px 6px ${cropInfo.color}30`,
+                            letterSpacing: '0.02em',
+                          }}
+                        >
+                          {cropInfo.displayName}
+                        </span>
+                      </div>
+
+                      {/* Area Card */}
+                      <div
+                        style={{
+                          background: '#F9FAFB',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: '#6B7280',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            marginBottom: '2px',
+                          }}
+                        >
+                          📐 Área
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: '#111827',
+                          }}
+                        >
+                          {property.area}{' '}
+                          <span style={{ color: '#6B7280', fontWeight: 500 }}>ha</span>
+                        </div>
+                      </div>
+
+                      {/* Productivity Card with Visual Bar */}
+                      <div
+                        style={{
+                          background: '#F9FAFB',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          gridColumn: 'span 2',
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: '#6B7280',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            marginBottom: '6px',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <span>📈 Productividad</span>
+                          <span
+                            style={{
+                              fontSize: '14px',
+                              fontWeight: 800,
+                              color:
+                                property.productivity >= 70
+                                  ? '#16A34A'
+                                  : property.productivity >= 40
+                                    ? '#CA8A04'
+                                    : '#DC2626',
+                            }}
+                          >
+                            {property.productivity}%
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            height: '6px',
+                            background: '#E5E7EB',
+                            borderRadius: '3px',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <div
+                            style={{
+                              height: '100%',
+                              width: `${property.productivity}%`,
+                              background:
+                                property.productivity >= 70
+                                  ? 'linear-gradient(90deg, #16A34A, #22C55E)'
+                                  : property.productivity >= 40
+                                    ? 'linear-gradient(90deg, #CA8A04, #EAB308)'
+                                    : 'linear-gradient(90deg, #DC2626, #EF4444)',
+                              borderRadius: '3px',
+                              transition: 'width 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Certification Card (if exists) - Highlighted in Gold */}
+                      {property.certification && (
+                        <div
+                          style={{
+                            gridColumn: 'span 2',
+                            background:
+                              'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            border: '1px solid #FCD34D',
+                          }}
+                        >
+                          <span style={{ fontSize: '16px' }}>✅</span>
+                          <div>
+                            <div
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                color: '#92400E',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em',
+                              }}
+                            >
+                              Certificación
+                            </div>
+                            <div
+                              style={{
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                color: '#78350F',
+                                textTransform: 'capitalize',
+                              }}
+                            >
+                              {property.certification.replace('_', ' ')}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Coordinates Footer - Monospace Technical Style */}
                     <div
+                      className="popup-coords"
                       style={{
+                        padding: '10px 20px',
                         background: '#F9FAFB',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
+                        borderTop: '1px solid #E5E7EB',
+                        fontSize: '11px',
+                        color: '#6B7280',
+                        fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                        letterSpacing: '0.02em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
                       }}
                     >
-                      <div
-                        style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          color: '#6B7280',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          marginBottom: '2px',
-                        }}
-                      >
-                        📐 Área
-                      </div>
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          color: '#111827',
-                        }}
-                      >
-                        {property.area}{' '}
-                        <span style={{ color: '#6B7280', fontWeight: 500 }}>ha</span>
-                      </div>
-                    </div>
-
-                    {/* Crop */}
-                    <div
-                      style={{
-                        background: '#F9FAFB',
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          color: '#6B7280',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          marginBottom: '4px',
-                        }}
-                      >
-                        🌱 Cultivo
-                      </div>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '3px 10px',
-                          borderRadius: '999px',
-                          color: 'white',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          background: `linear-gradient(135deg, ${CROP_CATALOG[property.crop].color} 0%, ${CROP_CATALOG[property.crop].color}CC 100%)`,
-                          boxShadow: `0 2px 6px ${CROP_CATALOG[property.crop].color}30`,
-                          letterSpacing: '0.02em',
-                        }}
-                      >
-                        {CROP_CATALOG[property.crop].displayName}
+                      <span>🎯</span>
+                      <span>
+                        {property.lat.toFixed(4)}°, {property.lng.toFixed(4)}°
                       </span>
                     </div>
                   </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MarkerClusterGroup>
 
-                  {/* Coordinates Footer */}
+        {properties
+          .filter((p) => p.coordinates && p.coordinates.length > 0)
+          .map((property) => {
+            // ✅ DEFENSIVE: Get crop info once per property
+            const cropInfo = getCropInfo(property.crop);
+
+            return (
+              <Polygon
+                key={`polygon-${property.id}`}
+                positions={property.coordinates!}
+                pathOptions={{
+                  color: cropInfo.color,
+                  fillColor: cropInfo.color,
+                  fillOpacity: 0.25,
+                  weight: 2,
+                }}
+              >
+                <Popup
+                  maxWidth={520}
+                  minWidth={450}
+                  autoPan={true}
+                  autoPanPadding={[50, 50]}
+                  closeButton={false}
+                  closeOnClick={false}
+                  autoClose={true}
+                >
                   <div
+                    className="relative"
                     style={{
-                      padding: '10px 20px',
-                      background: '#F9FAFB',
-                      borderTop: '1px solid #E5E7EB',
-                      fontSize: '11px',
-                      color: '#6B7280',
-                      fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-                      letterSpacing: '0.02em',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      margin: 0,
+                      padding: 0,
                     }}
                   >
-                    <span>🎯</span>
-                    <span>
-                      {property.lat.toFixed(4)}°, {property.lng.toFixed(4)}°
-                    </span>
+                    {/* Unified Close Button */}
+                    <PopupCloseButton />
+
+                    {/* Polygon Header */}
+                    <div
+                      style={{
+                        padding: '16px 20px 12px 20px',
+                        background: 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
+                        borderBottom: '1px solid #E5E7EB',
+                      }}
+                    >
+                      <div
+                        style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}
+                      >
+                        <div
+                          style={{
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '12px',
+                            width: '48px',
+                            height: '48px',
+                            background: `linear-gradient(135deg, ${cropInfo.color} 0%, ${cropInfo.color}DD 100%)`,
+                            boxShadow: `0 4px 12px ${cropInfo.color}40`,
+                            fontSize: '24px',
+                          }}
+                        >
+                          {cropInfo.emoji}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              color: '#6B7280',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.05em',
+                              marginBottom: '2px',
+                            }}
+                          >
+                            Parcela
+                          </div>
+                          <h3
+                            style={{
+                              margin: 0,
+                              fontWeight: 700,
+                              lineHeight: 1.2,
+                              color: '#14532D',
+                              fontSize: '17px',
+                              letterSpacing: '-0.01em',
+                            }}
+                          >
+                            {property.name}
+                          </h3>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Polygon Detail */}
+                    <div
+                      style={{
+                        padding: '16px 20px',
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '12px',
+                      }}
+                    >
+                      {/* Area */}
+                      <div
+                        style={{
+                          background: '#F9FAFB',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: '#6B7280',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            marginBottom: '2px',
+                          }}
+                        >
+                          📐 Área
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: '#111827',
+                          }}
+                        >
+                          {property.area}{' '}
+                          <span style={{ color: '#6B7280', fontWeight: 500 }}>ha</span>
+                        </div>
+                      </div>
+
+                      {/* Crop */}
+                      <div
+                        style={{
+                          background: '#F9FAFB',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: '#6B7280',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            marginBottom: '4px',
+                          }}
+                        >
+                          🌱 Cultivo
+                        </div>
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            padding: '3px 10px',
+                            borderRadius: '999px',
+                            color: 'white',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            background: `linear-gradient(135deg, ${cropInfo.color} 0%, ${cropInfo.color}CC 100%)`,
+                            boxShadow: `0 2px 6px ${cropInfo.color}30`,
+                            letterSpacing: '0.02em',
+                          }}
+                        >
+                          {cropInfo.displayName}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Coordinates Footer */}
+                    <div
+                      style={{
+                        padding: '10px 20px',
+                        background: '#F9FAFB',
+                        borderTop: '1px solid #E5E7EB',
+                        fontSize: '11px',
+                        color: '#6B7280',
+                        fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                        letterSpacing: '0.02em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <span>🎯</span>
+                      <span>
+                        {property.lat.toFixed(4)}°, {property.lng.toFixed(4)}°
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </Popup>
-            </Polygon>
-          ))}
+                </Popup>
+              </Polygon>
+            );
+          })}
       </MapContainer>
     </div>
   );

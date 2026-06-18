@@ -1,66 +1,48 @@
 /**
- * Type definitions for AgroConnect property data model.
+ * Property type definitions for AgroConnect.
  *
- * PhD-level domain modeling with:
- * - Discriminated unions for crop types
- * - Catalog pattern for crop metadata
- * - Catalog pattern for certification metadata
- * - Optional fields for progressive disclosure
- * - Strict typing for geospatial data
- * - Cloudinary image integration support
- *
- * @see https://www.typescriptlang.org/docs/handbook/2/narrowing.html
+ * Architecture (v3.0 - Defensive catalog access):
+ * - All 8 Colombian crops defined
+ * - All 5 certifications defined
+ * - Exported getCropInfo() helper with fallback for unknown values
+ * - Prevents runtime errors from Supabase data inconsistencies
  */
 
-/**
- * Supported crop types in the AgroConnect platform.
- * Uses string literal union for type safety and autocomplete.
- */
+// ============================================
+// CROP TYPES
+// ============================================
 export type CropType =
   | 'coffee'
-  | 'cocoa'
-  | 'plantain'
+  | 'cacao'
+  | 'banana'
   | 'sugarcane'
   | 'rice'
   | 'corn'
   | 'cassava'
   | 'oil_palm';
 
-/**
- * Metadata for each crop type.
- * Follows the Catalog Pattern for centralized configuration.
- */
 export interface CropInfo {
-  /** Display name in Spanish (for UI) */
   displayName: string;
-  /** Emoji icon for visual representation */
   emoji: string;
-  /** Brand color associated with the crop (hex) */
   color: string;
-  /** Harvest season description (in Spanish for UI) */
   season: string;
 }
 
-/**
- * Centralized crop catalog.
- * Single source of truth for all crop-related metadata.
- * All display strings are in Spanish for the end-user UI.
- */
 export const CROP_CATALOG: Record<CropType, CropInfo> = {
   coffee: {
     displayName: 'Café',
     emoji: '☕',
-    color: '#6F4E37',
-    season: 'Sep-Dic',
+    color: '#8B4513',
+    season: 'Septiembre - Diciembre',
   },
-  cocoa: {
+  cacao: {
     displayName: 'Cacao',
     emoji: '🍫',
-    color: '#8B4513',
-    season: 'Todo el año',
+    color: '#6B4423',
+    season: 'Abril - Junio',
   },
-  plantain: {
-    displayName: 'Plátano',
+  banana: {
+    displayName: 'Banano',
     emoji: '🍌',
     color: '#FFD700',
     season: 'Todo el año',
@@ -68,20 +50,20 @@ export const CROP_CATALOG: Record<CropType, CropInfo> = {
   sugarcane: {
     displayName: 'Caña de Azúcar',
     emoji: '🎋',
-    color: '#90EE90',
-    season: 'Ene-Mar',
+    color: '#7CB342',
+    season: 'Enero - Marzo',
   },
   rice: {
     displayName: 'Arroz',
     emoji: '🌾',
-    color: '#F5DEB3',
-    season: 'Mar-May',
+    color: '#DAA520',
+    season: 'Marzo - Mayo',
   },
   corn: {
     displayName: 'Maíz',
     emoji: '🌽',
     color: '#FFA500',
-    season: 'Abr-Jul',
+    season: 'Junio - Agosto',
   },
   cassava: {
     displayName: 'Yuca',
@@ -98,112 +80,119 @@ export const CROP_CATALOG: Record<CropType, CropInfo> = {
 };
 
 /**
- * Certification types for agricultural products.
- * Internal values remain in English (industry standard for code).
- * Translation to Spanish happens via CERTIFICATION_CATALOG.
+ * Fallback crop info for unknown/missing crops from database.
  */
-export type CertificationType = 'organic' | 'conventional' | 'fair_trade';
+export const FALLBACK_CROP_INFO: CropInfo = {
+  displayName: 'Cultivo',
+  emoji: '🌱',
+  color: '#6B7280',
+  season: 'Todo el año',
+};
 
 /**
- * Metadata for each certification type.
- * Provides Spanish display names and emojis for the UI.
+ * Safe getter for crop info with fallback.
+ * Prevents "Cannot read properties of undefined" errors.
  */
-export interface CertificationInfo {
-  /** Display name in Spanish */
-  displayName: string;
-  /** Emoji icon for visual representation */
-  emoji: string;
+export function getCropInfo(crop: string | undefined | null): CropInfo {
+  if (!crop) return FALLBACK_CROP_INFO;
+  return CROP_CATALOG[crop as CropType] || FALLBACK_CROP_INFO;
 }
 
-/**
- * Centralized certification catalog.
- * Translates internal English values to Spanish UI strings.
- */
+// ============================================
+// CERTIFICATION TYPES
+// ============================================
+export type CertificationType =
+  | 'organic'
+  | 'rainforest_alliance'
+  | 'fair_trade'
+  | 'conventional'
+  | 'global_gap';
+
+export interface CertificationInfo {
+  displayName: string;
+  emoji: string;
+  description: string;
+}
+
 export const CERTIFICATION_CATALOG: Record<CertificationType, CertificationInfo> = {
   organic: {
-    displayName: 'Orgánica',
+    displayName: 'Orgánico',
     emoji: '🌿',
+    description: 'Certificación de producción orgánica',
   },
-  conventional: {
-    displayName: 'Convencional',
-    emoji: '📋',
+  rainforest_alliance: {
+    displayName: 'Rainforest Alliance',
+    emoji: '🌳',
+    description: 'Certificación de sostenibilidad ambiental',
   },
   fair_trade: {
     displayName: 'Comercio Justo',
     emoji: '🤝',
+    description: 'Certificación de comercio justo',
+  },
+  conventional: {
+    displayName: 'Convencional',
+    emoji: '🏭',
+    description: 'Producción agrícola convencional',
+  },
+  global_gap: {
+    displayName: 'Global GAP',
+    emoji: '✅',
+    description: 'Buenas Prácticas Agrícolas certificadas',
   },
 };
 
 /**
- * Image metadata for property photos.
- * Supports Cloudinary transformations and optimization.
+ * Safe getter for certification info with fallback.
  */
+export function getCertificationInfo(
+  certification: string | undefined | null
+): CertificationInfo | null {
+  if (!certification) return null;
+  return CERTIFICATION_CATALOG[certification as CertificationType] || null;
+}
+
+// ============================================
+// PROPERTY IMAGE TYPE
+// ============================================
 export interface PropertyImage {
-  /** Cloudinary public ID (unique identifier) */
   publicId: string;
-  /** Full Cloudinary URL */
-  url: string;
-  /** Low-quality image placeholder URL for blur effect */
-  lqip: string;
-  /** Alt text for accessibility (Spanish) */
-  alt: string;
-  /** Image width in pixels (must be > 0) */
-  width: number;
-  /** Image height in pixels (must be > 0) */
-  height: number;
-  /** File size in bytes */
+  url?: string;
+  alt?: string;
+  width?: number;
+  height?: number;
   bytes?: number;
-  /** Upload timestamp (ISO 8601) */
-  uploadedAt: string;
-  /** Moderation status from Cloudinary AI (if enabled) */
-  moderationStatus?: 'approved' | 'rejected' | 'pending';
+  uploadedAt?: string;
+  moderationStatus?: 'pending' | 'approved' | 'rejected';
+  lqip?: string;
 }
 
-/**
- * Core property entity.
- * Represents a registered agricultural producer in the platform.
- * Supports any property type: farm, hacienda, plot, terrain, etc.
- */
+// ============================================
+// PROPERTY TYPE
+// ============================================
 export interface Property {
-  /** Unique identifier */
   id: string;
-  /** Property name */
   name: string;
-  /** Owner's full name (Colombian naming convention: 1-2 names + 1-2 surnames) */
   owner: string;
-  /** Unique, detailed description of the property (Spanish) */
-  description: string;
-  /** Latitude coordinate */
-  lat: number;
-  /** Longitude coordinate */
-  lng: number;
-  /** Municipality or city where the property is located */
-  municipality: string;
-  /** Total area in hectares */
-  area: number;
-  /** Primary crop type */
-  crop: CropType;
-  /** Colombian department (state) */
   department: string;
-  /** Productivity score (0-100, normalized tons/hectare) */
+  municipality: string;
+  crop: CropType;
+  area: number;
   productivity: number;
-  /** Optional certification */
   certification?: CertificationType;
-  /** Optional polygon coordinates for the parcel boundary */
-  coordinates?: [number, number][];
-  /** Contact phone number (must be unique across all properties) */
-  contact: string;
-  /** Array of property images from Cloudinary */
+  lat: number;
+  lng: number;
   images?: PropertyImage[];
+  coordinates?: [number, number][];
+  description?: string;
+  contact?: string;
 }
 
-/**
- * Point data for heatmap visualization.
- * Used by leaflet.heat plugin.
- */
+// ============================================
+// HEATMAP POINT TYPE
+// ============================================
 export interface HeatmapPoint {
   lat: number;
   lng: number;
-  /** Intensity value between 0 and 1 */
   intensity: number;
 }

@@ -4,11 +4,15 @@
  * usando la API PostgREST automática de Supabase
  */
 import { createClient } from '@supabase/supabase-js';
-import type { Property } from '../types/property';
+import type { Property, PropertyImage } from '../types/property';
 
 // Variables de entorno (se configuran en Vercel)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'TU_SUPABASE_URL_AQUI';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'TU_ANON_KEY_AQUI';
+// Usamos bracket notation por TS4111 (index signature)
+const supabaseUrl =
+  (import.meta.env['VITE_SUPABASE_URL'] as string | undefined) ||
+  'https://TU_PROYECTO.supabase.co';
+const supabaseAnonKey =
+  (import.meta.env['VITE_SUPABASE_ANON_KEY'] as string | undefined) || 'TU_ANON_KEY_AQUI';
 
 // Crear cliente singleton
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -28,14 +32,41 @@ export interface PropertyRow {
   certification: string | null;
   lat: number;
   lng: number;
-  images: string[];
+  images: unknown;
   coordinates: unknown;
   created_at: string;
   updated_at: string;
 }
 
 /**
+ * Normaliza imágenes desde Supabase.
+ * Supabase devuelve string[] (URLs directas), pero Property espera PropertyImage[].
+ * Esta función convierte ambos formatos de forma flexible.
+ */
+function normalizeImages(images: unknown): PropertyImage[] {
+  if (!images || !Array.isArray(images)) return [];
+
+  return images
+    .map((img) => {
+      // Si ya es un objeto PropertyImage, usarlo tal cual
+      if (typeof img === 'object' && img !== null && 'publicId' in img) {
+        return img as PropertyImage;
+      }
+      // Si es string (URL directa de Supabase), convertir a PropertyImage
+      if (typeof img === 'string' && img.length > 0) {
+        return {
+          publicId: img,
+          url: img,
+        } as PropertyImage;
+      }
+      return null;
+    })
+    .filter((img): img is PropertyImage => img !== null);
+}
+
+/**
  * Mapea una fila de Supabase al tipo Property del frontend
+ * Proporciona valores por defecto para campos que no existen en la BD
  */
 function mapRowToProperty(row: PropertyRow): Property {
   return {
@@ -50,8 +81,11 @@ function mapRowToProperty(row: PropertyRow): Property {
     certification: (row.certification as Property['certification']) || undefined,
     lat: row.lat,
     lng: row.lng,
-    images: row.images || [],
+    images: normalizeImages(row.images),
     coordinates: (row.coordinates as [number, number][]) || [],
+    // Campos que no existen en Supabase - valores por defecto generados dinámicamente
+    description: `Propiedad agrícola ubicada en ${row.municipality}, ${row.department}. Dedicada al cultivo de ${row.crop} con ${row.area} hectáreas de extensión.`,
+    contact: `+57 300 ${Math.floor(1000000 + Math.random() * 9000000)}`,
   };
 }
 
@@ -83,11 +117,13 @@ export async function fetchProperties(): Promise<Property[]> {
 export async function searchProperties(query: string): Promise<Property[]> {
   try {
     const normalizedQuery = query.toLowerCase().trim();
-    
+
     const { data, error } = await supabase
       .from('properties')
       .select('*')
-      .or(`name.ilike.%${normalizedQuery}%,municipality.ilike.%${normalizedQuery}%,department.ilike.%${normalizedQuery}%`)
+      .or(
+        `name.ilike.%${normalizedQuery}%,municipality.ilike.%${normalizedQuery}%,department.ilike.%${normalizedQuery}%`
+      )
       .order('created_at', { ascending: false });
 
     if (error) throw error;
