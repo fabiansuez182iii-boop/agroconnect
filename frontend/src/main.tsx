@@ -15,12 +15,6 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-
-// Exponer Leaflet globalmente para compatibilidad con plugins
-(window as any).L = L;
-
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />

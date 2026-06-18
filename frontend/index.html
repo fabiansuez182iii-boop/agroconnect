@@ -24,7 +24,7 @@
     <!-- Theme Color for Mobile Browsers -->
     <meta name="theme-color" content="#2E7D32" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="AgroConnect" />
     
     <!-- Favicon -->
@@ -58,9 +58,33 @@
     <link rel="preconnect" href="https://res.cloudinary.com" />
     <link rel="preconnect" href="https://api.cloudinary.com" />
     
-    <!-- Unpkg -->
+    <!-- Unpkg (Leaflet CDN) -->
     <link rel="preconnect" href="https://unpkg.com" />
     
+    <!-- ========================================= -->
+    <!-- Leaflet CSS & JS from CDN (Enterprise GIS Pattern) -->
+    <!-- ========================================= -->
+    <!-- 
+      CRITICAL FIX: Load Leaflet globally BEFORE the app bundle executes.
+      This ensures plugins (leaflet-draw, leaflet.heat, leaflet-geosearch,
+      react-leaflet-markercluster) can access the global `L` variable.
+      
+      Security: Using Subresource Integrity (SRI) with SHA-256 hashes
+      to guarantee the CDN content hasn't been tampered with.
+      
+      Version pinning: @1.9.4 ensures reproducible builds.
+    -->
+    <link 
+      rel="stylesheet" 
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <script 
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
   </head>
   <body>
     <div id="root"></div>
