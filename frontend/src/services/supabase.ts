@@ -1,25 +1,17 @@
 /**
  * Cliente Supabase para AgroConnect
- * Conecta el frontend con la base de datos PostgreSQL
- * usando la API PostgREST automática de Supabase
  */
 import { createClient } from '@supabase/supabase-js';
 import type { Property, PropertyImage } from '../types/property';
 
-// Variables de entorno (se configuran en Vercel)
-// Usamos bracket notation por TS4111 (index signature)
 const supabaseUrl =
   (import.meta.env['VITE_SUPABASE_URL'] as string | undefined) ||
   'https://TU_PROYECTO.supabase.co';
 const supabaseAnonKey =
   (import.meta.env['VITE_SUPABASE_ANON_KEY'] as string | undefined) || 'TU_ANON_KEY_AQUI';
 
-// Crear cliente singleton
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-/**
- * Tipo que representa una fila en la tabla properties de Supabase
- */
 export interface PropertyRow {
   id: string;
   name: string;
@@ -38,32 +30,21 @@ export interface PropertyRow {
   updated_at: string;
 }
 
-/**
- * Normaliza imágenes desde Supabase.
- * Supabase devuelve string[] (URLs directas), pero Property espera PropertyImage[].
- */
 function normalizeImages(images: unknown): PropertyImage[] {
   if (!images || !Array.isArray(images)) return [];
-
   return images
     .map((img) => {
       if (typeof img === 'object' && img !== null && 'publicId' in img) {
         return img as PropertyImage;
       }
       if (typeof img === 'string' && img.length > 0) {
-        return {
-          publicId: img,
-          url: img,
-        } as PropertyImage;
+        return { publicId: img, url: img } as PropertyImage;
       }
       return null;
     })
     .filter((img): img is PropertyImage => img !== null);
 }
 
-/**
- * Mapea una fila de Supabase al tipo Property del frontend
- */
 function mapRowToProperty(row: PropertyRow): Property {
   return {
     id: row.id,
@@ -79,26 +60,21 @@ function mapRowToProperty(row: PropertyRow): Property {
     lng: row.lng,
     images: normalizeImages(row.images),
     coordinates: (row.coordinates as [number, number][]) || [],
-    description: `Propiedad agrícola ubicada en ${row.municipality}, ${row.department}. Dedicada al cultivo de ${row.crop} con ${row.area} hectáreas de extensión.`,
-    contact: `+57 300 ${Math.floor(1000000 + Math.random() * 9000000)}`,
+    description: `Propiedad en ${row.municipality}, ${row.department}`,
+    contact: '+57 300 123 4567',
   };
 }
 
-/**
- * Obtiene todas las propiedades desde la base de datos
- */
 export async function fetchProperties(): Promise<Property[]> {
   try {
     const { data, error } = await supabase
       .from('properties')
       .select('*')
       .order('created_at', { ascending: false });
-
     if (error) {
-      console.error('[Supabase] Error fetching properties:', error);
+      console.error('[Supabase] Error:', error);
       throw error;
     }
-
     return (data as PropertyRow[]).map(mapRowToProperty);
   } catch (error) {
     console.error('[Supabase] Exception:', error);
@@ -106,21 +82,14 @@ export async function fetchProperties(): Promise<Property[]> {
   }
 }
 
-/**
- * Busca propiedades por texto (nombre, municipio, departamento, cultivo)
- */
 export async function searchProperties(query: string): Promise<Property[]> {
   try {
-    const normalizedQuery = query.toLowerCase().trim();
-
+    const q = query.toLowerCase().trim();
     const { data, error } = await supabase
       .from('properties')
       .select('*')
-      .or(
-        `name.ilike.%${normalizedQuery}%,municipality.ilike.%${normalizedQuery}%,department.ilike.%${normalizedQuery}%`
-      )
+      .or(`name.ilike.%${q}%,municipality.ilike.%${q}%,department.ilike.%${q}%`)
       .order('created_at', { ascending: false });
-
     if (error) throw error;
     return (data as PropertyRow[]).map(mapRowToProperty);
   } catch (error) {
