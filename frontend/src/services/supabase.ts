@@ -6,9 +6,9 @@ import type { Property, PropertyImage } from '../types/property';
 
 const supabaseUrl =
   (import.meta.env['VITE_SUPABASE_URL'] as string | undefined) ||
-  'https://TU_PROYECTO.supabase.co';
+  'https://fwmaehhzfydbhilpfbrl.supabase.co';
 const supabaseAnonKey =
-  (import.meta.env['VITE_SUPABASE_ANON_KEY'] as string | undefined) || 'TU_ANON_KEY_AQUI';
+  (import.meta.env['VITE_SUPABASE_ANON_KEY'] as string | undefined) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3bWFlaGh6ZnlkYmhpbHBmYnJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MjA2MDksImV4cCI6MjA5NzI5NjYwOX0._ie3wB-LOT1dYuFmvKLB6RXpSSS-rcmadNOPcGKOeTA';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
