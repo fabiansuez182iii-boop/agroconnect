@@ -41,18 +41,15 @@ export interface PropertyRow {
 /**
  * Normaliza imágenes desde Supabase.
  * Supabase devuelve string[] (URLs directas), pero Property espera PropertyImage[].
- * Esta función convierte ambos formatos de forma flexible.
  */
 function normalizeImages(images: unknown): PropertyImage[] {
   if (!images || !Array.isArray(images)) return [];
 
   return images
     .map((img) => {
-      // Si ya es un objeto PropertyImage, usarlo tal cual
       if (typeof img === 'object' && img !== null && 'publicId' in img) {
         return img as PropertyImage;
       }
-      // Si es string (URL directa de Supabase), convertir a PropertyImage
       if (typeof img === 'string' && img.length > 0) {
         return {
           publicId: img,
@@ -66,7 +63,6 @@ function normalizeImages(images: unknown): PropertyImage[] {
 
 /**
  * Mapea una fila de Supabase al tipo Property del frontend
- * Proporciona valores por defecto para campos que no existen en la BD
  */
 function mapRowToProperty(row: PropertyRow): Property {
   return {
@@ -83,7 +79,6 @@ function mapRowToProperty(row: PropertyRow): Property {
     lng: row.lng,
     images: normalizeImages(row.images),
     coordinates: (row.coordinates as [number, number][]) || [],
-    // Campos que no existen en Supabase - valores por defecto generados dinámicamente
     description: `Propiedad agrícola ubicada en ${row.municipality}, ${row.department}. Dedicada al cultivo de ${row.crop} con ${row.area} hectáreas de extensión.`,
     contact: `+57 300 ${Math.floor(1000000 + Math.random() * 9000000)}`,
   };
