@@ -19,6 +19,13 @@ import { PropertyDetailModal } from './components/ui/PropertyDetailModal';
 import { CROP_CATALOG, getCropInfo, getCertificationInfo } from './types/property';
 import type { Property } from './types/property';
 
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+if (typeof window !== 'undefined') {
+  (window as any).L = L;
+}
+
 const PropertyMap = lazy(() =>
   import('./components/maps/PropertyMap').then((module) => ({
     default: module.PropertyMap,

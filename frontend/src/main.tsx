@@ -21,6 +21,12 @@ import 'leaflet/dist/leaflet.css';
 // Exponer Leaflet globalmente para compatibilidad con plugins
 (window as any).L = L;
 
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
 /**
  * Register the Service Worker for offline support.
  *
